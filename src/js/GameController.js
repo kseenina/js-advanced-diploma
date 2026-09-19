@@ -19,6 +19,7 @@ export default class GameController {
     // TODO: add event listeners to gamePlay events
     // TODO: load saved stated from stateService
     this.gamePlay.drawUi(themes[this.level]);
+    this.subscribeToEvents();
 
     const playerTypes = [Bowman, Swordsman, Magician];
     const enemyTypes = [Vampire, Undead, Daemon];
@@ -55,6 +56,16 @@ export default class GameController {
     }
 
     this.gamePlay.redrawPositions(positions);
+    this.positions = positions;
+  }
+
+  subscribeToEvents() {
+    this.gamePlay.addCellEnterListener(this.onCellEnter.bind(this));
+    this.gamePlay.addCellLeaveListener(this.onCellLeave.bind(this));
+  }
+
+  formatCharacterInfo(character) {
+    return `🎖${character.level} ⚔${character.attack} 🛡${character.defence} ❤${character.health}`;
   }
 
   onCellClick(index) {
@@ -62,10 +73,15 @@ export default class GameController {
   }
 
   onCellEnter(index) {
-    // TODO: react to mouse enter
+    const position = this.positions.find(item => item.position === index);
+    if (position) {
+      const character = position.character;
+      const info = this.formatCharacterInfo(character);
+      this.gamePlay.showCellTooltip(info, index);
+    }
   }
 
   onCellLeave(index) {
-    // TODO: react to mouse leave
+    this.gamePlay.hideCellTooltip(index);
   }
 }
