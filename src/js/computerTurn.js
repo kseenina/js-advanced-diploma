@@ -1,6 +1,6 @@
 import { getAvailableAttacks, getAvailableMoves, getRowCol } from "./movement.js";
 
-export default function computerTurn(gameController) {
+export default async function computerTurn(gameController) {
   gameController.gameState.isProcessing = true;
   
   const positions = gameController.positions;
@@ -35,8 +35,7 @@ export default function computerTurn(gameController) {
     });
 
     if (attacker) {
-      gameController.performAttack(attacker.position, weakestTarget.position);
-      gameController.gameState.toggleTurn();
+      await gameController.performAttack(attacker.position, weakestTarget.position);
       gameController.gameState.isProcessing = false;
       return;
     }
@@ -85,7 +84,6 @@ export default function computerTurn(gameController) {
         gameController.gamePlay.redrawPositions(positions);
     }
   }
-
   gameController.gameState.toggleTurn();
   gameController.gameState.isProcessing = false;
 }

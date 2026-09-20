@@ -24,26 +24,18 @@ export default class GameController {
     this.enemyTypes = ['vampire', 'undead', 'daemon'];
     this.characterClasses = [Bowman, Swordsman, Magician];
     this.enemyClasses = [Vampire, Undead, Daemon];
+    this.lastSelectedCharacter = null;
   }
 
   init() {
+    this.level = 1;
+    this.gameState = new GameState();
+    this.positions = [];
+
     this.gamePlay.drawUi(themes[this.level]);
     this.subscribeToEvents();
 
-    const maxLevel = 4;
-    const characterCount = 4;
-    
-    const playerTeam = generateTeam(this.characterClasses, maxLevel, characterCount);
-    const enemyTeam = generateTeam(this.enemyClasses, maxLevel, characterCount);
-
-    const positions = [];
-    const usedIndexes = new Set();
-
-    this.generateCharacterPositions(positions, usedIndexes, playerTeam.characters, 0, 1);
-    this.generateCharacterPositions(positions, usedIndexes, enemyTeam.characters, 6, 2);
-
-    this.gamePlay.redrawPositions(positions);
-    this.positions = positions;
+    this.initLevel(true);
   }
 
   subscribeToEvents() {
@@ -90,9 +82,10 @@ export default class GameController {
     this.gameState.selectedCell = index;
     this.gameState.availableMoves = getAvailableMoves(index, this.boardSize, character.type);
     this.gameState.availableAttacks = getAvailableAttacks(index, this.boardSize, character.type);
+    this.lastSelectedCharacter = character;
   }
 
-  hightlightHoveredCell(index, position) {
+  highlightHoveredCell(index, position) {
     const isAvailableMove = this.gameState.availableMoves.includes(index);
     const isAvailableAttack = this.gameState.availableAttacks.includes(index);
 
@@ -124,11 +117,119 @@ export default class GameController {
     }
 
     this.gamePlay.redrawPositions(this.positions);
+    this.removeDeadCharacters();
+    if (this.checkVictory()) {
+      return;
+    }
     this.clearSelection();
     this.gameState.selectedCell = null;
     this.gameState.availableMoves = [];
     this.gameState.availableAttacks = [];
     this.gameState.toggleTurn();
+    
+  }
+
+  removeDeadCharacters() {
+    this.positions = this.positions.filter(p => p.character.health > 0);
+    this.gamePlay.redrawPositions(this.positions);
+  }
+
+  checkVictory() {
+    const playerAlive = this.positions.some(p => this.isPlayerCharacter(p.character));
+    const enemyAlive = this.positions.some(p => this.isEnemyCharacter(p.character));
+    if(!enemyAlive) {
+      this.levelUp();
+      return true;
+    }
+
+    if(!playerAlive) {
+      alert('Поражение! Попробуем еще разок?');
+      this.level = 1;
+      this.init();
+      return true;
+    }
+
+    return false;
+  }
+
+  levelUp() {
+    const playerPositions = this.positions.filter(p => this.isPlayerCharacter(p.character));
+    for (const pos of playerPositions) {
+      const character = pos.character;
+      character.levelUp();
+    }
+
+    this.level++;
+    if (this.level > 4) {
+      alert('Вы победили! Мир был освобожден от нечисти силами ваших доблестных бойцов! Спасибо за игру!');
+      this.level = 1;
+      this.init();
+      return;
+    }
+
+    this.initLevel(false);
+  }
+
+  getPlayerCharacterCountForLevel(level) {
+    if (level === 1) return 2;
+    if (level === 2) return 3;
+    return 5;
+  }
+
+  initLevel(isFirstStart = false) {
+    const requiredPlayerCount = this.getPlayerCharacterCountForLevel(this.level);
+
+    let playerCharacters = [];
+    if (!isFirstStart) {
+      playerCharacters = this.positions
+        .filter(p => this.isPlayerCharacter(p.character) && p.character.health > 0)
+        .map(p => p.character);
+    }
+
+    if (isFirstStart) {
+      const maxLevel = this.level;
+      const playerTeam = generateTeam(this.characterClasses, maxLevel, requiredPlayerCount);
+      playerCharacters = playerTeam.characters;
+    } else {
+      if (playerCharacters.length < requiredPlayerCount) {
+        const missingCount = requiredPlayerCount - playerCharacters.length;
+        const maxLevel = this.level;
+        const newTeam = generateTeam(this.characterClasses, maxLevel, missingCount);
+        playerCharacters.push(...newTeam.characters);
+      }
+
+      if (playerCharacters.length > requiredPlayerCount) {
+        playerCharacters = playerCharacters.slice(0, requiredPlayerCount);
+      }
+    }
+
+    const maxLevel = this.level;
+    const enemyCount = requiredPlayerCount;
+    const enemyTeam = generateTeam(this.enemyClasses, maxLevel, enemyCount);
+    const enemyCharacters = enemyTeam.characters;
+
+    const positions = [];
+    const usedIndexes = new Set();
+
+    this.generateCharacterPositions(positions, usedIndexes, playerCharacters, 0, 2);
+    this.generateCharacterPositions(positions, usedIndexes, enemyCharacters, 6, 2);
+
+    this.positions = positions;
+    this.gamePlay.drawUi(themes[this.level]);
+    this.gamePlay.redrawPositions(this.positions);
+  }
+
+  restoreLastSelectedCharacter() {
+    if(!this.lastSelectedCharacter) {
+      return;
+    }
+    const position = this.positions.find(item => item.character === this.lastSelectedCharacter);
+    if (!position || !this.isPlayerCharacter(position.character)) {
+      this.lastSelectedCharacter = null;
+      return
+    }
+
+    this.selectCharacter(position.position, position.character);
   }
 
   isPlayerCharacter(character) {
@@ -139,7 +240,7 @@ export default class GameController {
     return this.enemyTypes.includes(character.type);
   }
 
-  onCellClick(index) {    
+  async onCellClick(index) {    
     if (this.gameState.isProcessing) {
       return;
     }
@@ -187,7 +288,8 @@ export default class GameController {
 
       this.gamePlay.redrawPositions(this.positions);
       this.gameState.toggleTurn();
-      computerTurn(this);
+      await computerTurn(this)
+      this.restoreLastSelectedCharacter();
 
       return;
     }
@@ -200,7 +302,9 @@ export default class GameController {
         GamePlay.showError('Противник вне зоны досягаемости!');
         return;
       }
-      this.performAttack(this.gameState.selectedCell, index);
+      await this.performAttack(this.gameState.selectedCell, index);
+      await computerTurn(this);
+      this.restoreLastSelectedCharacter();
       return;
     }
 
@@ -222,7 +326,7 @@ export default class GameController {
       return;
     } 
     
-    this.hightlightHoveredCell(index, position);
+    this.highlightHoveredCell(index, position);
     this.updateCursor(index, position);
   }
 
