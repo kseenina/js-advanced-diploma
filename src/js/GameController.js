@@ -9,6 +9,8 @@ import PositionedCharacter from "./PositionedCharacter.js";
 import themes from "./themes.js";
 import GameState from "./GameState.js";
 import GamePlay from "./GamePlay.js";
+import { getAvailableMoves } from "./movement.js";
+import { getAvailableAttacks } from "./movement.js";
 
 export default class GameController {
   constructor(gamePlay, stateService) {
@@ -16,47 +18,28 @@ export default class GameController {
     this.stateService = stateService;
     this.level = 1;
     this.gameState = new GameState();
+    this.boardSize = 8;
+    this.playerTypes = ['bowman', 'swordsman', 'magician'];
+    this.enemyTypes = ['vampire', 'undead', 'daemon'];
+    this.characterClasses = [Bowman, Swordsman, Magician];
+    this.enemyClasses = [Vampire, Undead, Daemon];
   }
 
   init() {
-    // TODO: add event listeners to gamePlay events
-    // TODO: load saved stated from stateService
     this.gamePlay.drawUi(themes[this.level]);
     this.subscribeToEvents();
 
-    const playerTypes = [Bowman, Swordsman, Magician];
-    const enemyTypes = [Vampire, Undead, Daemon];
     const maxLevel = 4;
     const characterCount = 4;
     
-    const playerTeam = generateTeam(playerTypes, maxLevel, characterCount);
-    const enemyTeam = generateTeam(enemyTypes, maxLevel, characterCount);
+    const playerTeam = generateTeam(this.characterClasses, maxLevel, characterCount);
+    const enemyTeam = generateTeam(this.enemyClasses, maxLevel, characterCount);
 
-    const boardSize = 8;
     const positions = [];
     const usedIndexes = new Set();
 
-    for (let i = 0; i < characterCount; i++) {
-      let index;
-      do {
-        const col = Math.floor(Math.random() * 2);
-        const row = Math.floor(Math.random() * boardSize);
-        index = (row * boardSize) + col; 
-      } while (usedIndexes.has(index));
-      usedIndexes.add(index);
-      positions.push(new PositionedCharacter(playerTeam.characters[i], index));
-    }
-
-    for (let i = 0; i < characterCount; i++) {
-      let index;
-      do {
-        const col = 6 + Math.floor(Math.random() * 2);
-        const row = Math.floor(Math.random() * boardSize);
-        index = (row * boardSize) + col;
-      } while (usedIndexes.has(index));
-      usedIndexes.add(index);
-      positions.push(new PositionedCharacter(enemyTeam.characters[i], index));
-    }
+    this.generateCharacterPositions(positions, usedIndexes, playerTeam.characters, 0, 1);
+    this.generateCharacterPositions(positions, usedIndexes, enemyTeam.characters, 6, 2);
 
     this.gamePlay.redrawPositions(positions);
     this.positions = positions;
@@ -72,37 +55,157 @@ export default class GameController {
     return `🎖${character.level} ⚔${character.attack} 🛡${character.defence} ❤${character.health}`;
   }
 
-  onCellClick(index) {    
-    const position = this.positions.find(item => item.position === index);
-    if (!position) {
-      GamePlay.showError('Тут никого нет! :(');
-      return;
+  generateCharacterPositions(positions, usedIndexes, characters, startCol, colCount) {
+    for (let i = 0; i < characters.length; i++) {
+      let index;
+      do {
+        const col = startCol + Math.floor(Math.random() * colCount);
+        const row = Math.floor(Math.random() * this.boardSize);
+        index = (row * this.boardSize) + col; 
+      } while (usedIndexes.has(index));
+      usedIndexes.add(index);
+      positions.push(new PositionedCharacter(characters[i], index));
     }
-    const character = position.character;
-    const playerTypes = ['bowman', 'swordsman', 'magician'];
+  }
 
-    if(!playerTypes.includes(character.type)) {
-      GamePlay.showError('Это не твой боец, не трожь!');
-      return;
+  clearSelection() {
+    const { selectedCell, availableMoves, availableAttacks } = this.gameState;
+    
+    if (selectedCell !== null) {
+      this.gamePlay.deselectCell(selectedCell);
     }
-    if (this.gameState.selectedCell !== null) {
-      const prevIndex = this.gameState.selectedCell;
-      this.gamePlay.deselectCell(prevIndex);
+    
+    for (const moveIndex of availableMoves) {
+      this.gamePlay.deselectCell(moveIndex);
     }
+    
+    for (const moveIndex of availableAttacks) {
+      this.gamePlay.deselectCell(moveIndex);
+    }
+  }
+
+  selectCharacter(index, character) {
     this.gamePlay.selectCell(index);
     this.gameState.selectedCell = index;
+    this.gameState.availableMoves = getAvailableMoves(index, this.boardSize, character.type);
+    this.gameState.availableAttacks = getAvailableAttacks(index, this.boardSize, character.type);
+  }
+
+  hightlightHoveredCell(index, position) {
+    const isAvailableMove = this.gameState.availableMoves.includes(index);
+    const isAvailableAttack = this.gameState.availableAttacks.includes(index);
+
+    if (!position && isAvailableMove) {
+      this.gamePlay.selectCell(index, 'green');
+      return;
+    }
+
+    if (position && this.isEnemyCharacter(position.character) && isAvailableAttack) {
+      this.gamePlay.selectCell(index, 'red');
+    }
+  }
+
+  isPlayerCharacter(character) {
+    return this.playerTypes.includes(character.type);
+  }
+
+  isEnemyCharacter(character) {
+    return this.enemyTypes.includes(character.type);
+  }
+
+  onCellClick(index) {    
+    const position = this.positions.find(item => item.position === index);
+
+    if (this.gameState.selectedCell === null) {
+      if (!position) {
+        GamePlay.showError('Тут никого нет! :(');
+        return;
+      }
+
+      const character = position.character;
+      if (!this.isPlayerCharacter(character)) {
+        GamePlay.showError('Это не твой боец, не трожь!');
+        return;
+      }
+
+      this.selectCharacter(index, character);
+      return;
+    }
+
+    if (this.gameState.selectedCell === index) {
+      this.clearSelection();
+      this.gameState.selectedCell = null;
+      this.gameState.availableMoves = [];
+      this.gameState.availableAttacks = [];
+      return;
+    }
+
+    if (!position) {
+      const isAvailableMove = this.gameState.availableMoves.includes(index);
+      if (!isAvailableMove) {
+        GamePlay.showError('Тут не пройти!');
+        return;
+      }
+      return;
+    }
+
+    const character = position.character;
+
+    if (!this.isPlayerCharacter(character)) {
+      const isAvailableAttacks = this.gameState.availableAttacks.includes(index);
+      if (!isAvailableAttacks) {
+        GamePlay.showError('Противник вне зоны досягаемости!');
+        return;
+      }
+      return;
+    }
+
+    this.clearSelection();
+    this.selectCharacter(index, character);
   }
 
   onCellEnter(index) {
     const position = this.positions.find(item => item.position === index);
+    
     if (position) {
       const character = position.character;
       const info = this.formatCharacterInfo(character);
       this.gamePlay.showCellTooltip(info, index);
     }
+
+    if (this.gameState.selectedCell === null) {
+      this.gamePlay.setCursor('auto');
+      return;
+    } 
+    
+    this.hightlightHoveredCell(index, position);
+    this.updateCursor(index, position);
+  }
+
+  updateCursor(index, position) {
+    const isAvailableMove = this.gameState.availableMoves.includes(index);
+    const isAvailableAttack = this.gameState.availableAttacks.includes(index);
+    const hasCharacter = this.positions.some(p => p.position === index);
+
+    if (!hasCharacter) {
+      this.gamePlay.setCursor(isAvailableMove ? 'pointer' : 'not-allowed');
+    } else {
+      const character = position.character;
+      if (this.isPlayerCharacter(character)) {
+        this.gamePlay.setCursor('pointer');
+      } else if (this.isEnemyCharacter(character) && isAvailableAttack) {
+        this.gamePlay.setCursor('crosshair');
+      } else {
+        this.gamePlay.setCursor('not-allowed');
+      }
+    }
   }
 
   onCellLeave(index) {
     this.gamePlay.hideCellTooltip(index);
+    if (this.gameState.selectedCell === index) {
+      return;
+    }
+    this.gamePlay.deselectCell(index)
   }
 }
