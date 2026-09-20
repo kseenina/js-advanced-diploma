@@ -50,6 +50,37 @@ export default class GameController {
     this.gamePlay.addCellLeaveListener(this.onCellLeave.bind(this));
     this.gamePlay.addCellClickListener(this.onCellClick.bind(this));
     this.gamePlay.addNewGameListener(this.onNewGame.bind(this));
+    this.gamePlay.addSaveGameListener(this.onSaveGame.bind(this));
+    this.gamePlay.addLoadGameListener(this.onLoadGame.bind(this));
+  }
+
+  updateGameState() {
+    this.gameState.level = this.level;
+    this.gameState.positions = this.positions;
+  }
+
+  onSaveGame() {
+    this.updateGameState();
+    this.stateService.save(this.gameState);
+    GamePlay.showMessage('Игра сохранена');
+  }
+
+  onLoadGame() {
+    try {
+      const savedState = this.stateService.load();
+      this.gameState = GameState.from(savedState);
+      this.level = this.gameState.level;
+
+      this.positions = this.restorePositions(this.gameState.positions);
+      this.gameState.positions = this.positions;
+
+      this.isGameOver = false;
+
+      this.gamePlay.drawUi(themes[this.level]);
+      this.gamePlay.redrawPositions(this.positions);
+    } catch (error) {
+      GamePlay.showError('Не удалось загрузить игру');
+    }
   }
 
   onNewGame() {
@@ -62,6 +93,42 @@ export default class GameController {
     this.isGameOver = false;
     this.gamePlay.drawUi(themes[this.level]);
     this.initLevel(true);
+  }
+
+  restorePositions(savedPositions) {
+    return savedPositions.map(item => {
+      const character = this.createCharacter(item.character);
+
+      return new PositionedCharacter(
+        character,
+        item.position,
+      );
+    });
+  }
+
+  createCharacter(savedCharacter) {
+    const classes = {
+      bowman: Bowman,
+      swordsman: Swordsman,
+      magician: Magician,
+      vampire: Vampire,
+      undead: Undead,
+      daemon: Daemon,
+    };
+
+    const CharacterClass = classes[savedCharacter.type];
+
+    if (!CharacterClass) {
+      throw new Error('Имя класса не установлено');
+    }
+
+    const character = new CharacterClass(savedCharacter.level);
+
+    character.attack = savedCharacter.attack;
+    character.defence = savedCharacter.defence;
+    character.health = savedCharacter.health;
+
+    return character;
   }
 
   formatCharacterInfo(character) {
@@ -338,8 +405,8 @@ export default class GameController {
     const character = position.character;
 
     if (!this.isPlayerCharacter(character)) {
-      const isAvailableAttacks = this.gameState.availableAttacks.includes(index);
-      if (!isAvailableAttacks) {
+      const isAvailableAttack = this.gameState.availableAttacks.includes(index);
+      if (!isAvailableAttack) {
         GamePlay.showError('Противник вне зоны досягаемости!');
         return;
       }
