@@ -25,15 +25,22 @@ export default class GameController {
     this.characterClasses = [Bowman, Swordsman, Magician];
     this.enemyClasses = [Vampire, Undead, Daemon];
     this.lastSelectedCharacter = null;
+    this.isGameOver = false;
+    this.eventsSubscribed = false;
   }
 
   init() {
     this.level = 1;
     this.gameState = new GameState();
     this.positions = [];
+    this.isGameOver = false;
 
     this.gamePlay.drawUi(themes[this.level]);
-    this.subscribeToEvents();
+
+    if(!this.eventsSubscribed) {
+      this.subscribeToEvents();
+      this.eventsSubscribed = true;
+    }
 
     this.initLevel(true);
   }
@@ -42,6 +49,19 @@ export default class GameController {
     this.gamePlay.addCellEnterListener(this.onCellEnter.bind(this));
     this.gamePlay.addCellLeaveListener(this.onCellLeave.bind(this));
     this.gamePlay.addCellClickListener(this.onCellClick.bind(this));
+    this.gamePlay.addNewGameListener(this.onNewGame.bind(this));
+  }
+
+  onNewGame() {
+    const maxScore = this.gameState.maxScore;
+    this.gameState = new GameState();
+    this.gameState.maxScore = maxScore;
+    this.level = 1;
+    this.positions = [];
+    this.selectCharacter = null;
+    this.isGameOver = false;
+    this.gamePlay.drawUi(themes[this.level]);
+    this.initLevel(true);
   }
 
   formatCharacterInfo(character) {
@@ -116,6 +136,10 @@ export default class GameController {
       target.health = 0;
     }
 
+    if (target.health === 0 && this.isEnemyCharacter(target)) {
+      this.gameState.score += (10 * target.level);
+    }
+
     this.gamePlay.redrawPositions(this.positions);
     this.removeDeadCharacters();
     if (this.checkVictory()) {
@@ -143,13 +167,26 @@ export default class GameController {
     }
 
     if(!playerAlive) {
-      alert('Поражение! Попробуем еще разок?');
-      this.level = 1;
-      this.init();
+      this.finishGame(false);
       return true;
     }
 
     return false;
+  }
+
+  finishGame(isVictory) {
+    this.isGameOver = true;
+    this.updateMaxScore();
+    this.clearSelection();
+    this.gameState.selectedCell = null;
+    this.gameState.availableMoves = [];
+    this.gameState.availableAttacks = [];
+
+    if (isVictory) {
+      alert(`Вы победили! Мир был освобожден от нечисти силами ваших доблестных бойцов! Ваш результат: ${this.gameState.score}. ` + `Максимальный результат: ${this.gameState.maxScore}`);
+    } else {
+      alert(`Поражение! Ваш результат: ${this.gameState.score}. ` + `Максимальный результат: ${this.gameState.maxScore}`)
+    }
   }
 
   levelUp() {
@@ -161,9 +198,7 @@ export default class GameController {
 
     this.level++;
     if (this.level > 4) {
-      alert('Вы победили! Мир был освобожден от нечисти силами ваших доблестных бойцов! Спасибо за игру!');
-      this.level = 1;
-      this.init();
+      this.finishGame();
       return;
     }
 
@@ -174,6 +209,12 @@ export default class GameController {
     if (level === 1) return 2;
     if (level === 2) return 3;
     return 5;
+  }
+
+  updateMaxScore() {
+    if (this.gameState.score > this.gameState.maxScore) {
+      this.gameState.maxScore = this.gameState.score;
+    }
   }
 
   initLevel(isFirstStart = false) {
@@ -241,7 +282,7 @@ export default class GameController {
   }
 
   async onCellClick(index) {    
-    if (this.gameState.isProcessing) {
+    if (this.gameState.isProcessing || this.isGameOver) {
       return;
     }
     
@@ -259,7 +300,7 @@ export default class GameController {
         return;
       }
 
-      this.selectCharacter(index, character);
+      await this.selectCharacter(index, character);
       return;
     }
 
@@ -313,6 +354,10 @@ export default class GameController {
   }
 
   onCellEnter(index) {
+    if (this.isGameOver) {
+      return;
+    }
+
     const position = this.positions.find(item => item.position === index);
     
     if (position) {
@@ -350,6 +395,9 @@ export default class GameController {
   }
 
   onCellLeave(index) {
+    if (this.isGameOver) {
+      return;
+    }
     this.gamePlay.hideCellTooltip(index);
     if (this.gameState.selectedCell === index) {
       return;

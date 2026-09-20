@@ -5,6 +5,8 @@ export default class GameState {
     this.availableMoves = [];
     this.availableAttacks = [];
     this.isProcessing = false;
+    this.score = 0;
+    this.maxScore = 0;
   }
 
   toggleTurn() {
