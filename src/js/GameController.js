@@ -11,6 +11,7 @@ import GameState from "./GameState.js";
 import GamePlay from "./GamePlay.js";
 import { getAvailableMoves } from "./movement.js";
 import { getAvailableAttacks } from "./movement.js";
+import computerTurn from "./computerTurn.js";
 
 export default class GameController {
   constructor(gamePlay, stateService) {
@@ -105,21 +106,21 @@ export default class GameController {
     }
   }
 
-  async performAttack(playerIndex, enemyIndex) {
-    const playerPosition = this.positions.find(p => p.position === playerIndex);
-    const enemyPosition = this.positions.find(p => p.position === enemyIndex);
+  async performAttack(attackerIndex, targetIndex) {
+    const attackerPosition = this.positions.find(p => p.position === attackerIndex);
+    const targetPosition = this.positions.find(p => p.position === targetIndex);
 
-    const playerCharacter = playerPosition.character;
-    const enemyCharacter = enemyPosition.character;
+    const attacker = attackerPosition.character;
+    const target = targetPosition.character;
 
-    const damage = Math.max(playerCharacter.attack - enemyCharacter.defence, playerCharacter.attack * 0.1);
+    const damage = Math.max(attacker.attack - target.defence, attacker.attack * 0.1)
 
     await 
-    this.gamePlay.showDamage(enemyIndex, Math.round(damage));
+    this.gamePlay.showDamage(targetIndex, Math.round(damage));
 
-    enemyCharacter.health -= damage;
-    if (enemyCharacter.health < 0) {
-      enemyCharacter.health = 0;
+    target.health -= damage;
+    if (target.health < 0) {
+      target.health = 0;
     }
 
     this.gamePlay.redrawPositions(this.positions);
@@ -139,6 +140,10 @@ export default class GameController {
   }
 
   onCellClick(index) {    
+    if (this.gameState.isProcessing) {
+      return;
+    }
+    
     const position = this.positions.find(item => item.position === index);
 
     if (this.gameState.selectedCell === null) {
@@ -182,6 +187,7 @@ export default class GameController {
 
       this.gamePlay.redrawPositions(this.positions);
       this.gameState.toggleTurn();
+      computerTurn(this);
 
       return;
     }

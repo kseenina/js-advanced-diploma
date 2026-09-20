@@ -1,4 +1,4 @@
-function getRowCol(index, boardSize) {
+export function getRowCol(index, boardSize) {
     const row = Math.floor(index / boardSize);
     const col = index % boardSize;
     return {row, col};
