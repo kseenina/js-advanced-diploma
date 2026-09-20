@@ -105,6 +105,31 @@ export default class GameController {
     }
   }
 
+  async performAttack(playerIndex, enemyIndex) {
+    const playerPosition = this.positions.find(p => p.position === playerIndex);
+    const enemyPosition = this.positions.find(p => p.position === enemyIndex);
+
+    const playerCharacter = playerPosition.character;
+    const enemyCharacter = enemyPosition.character;
+
+    const damage = Math.max(playerCharacter.attack - enemyCharacter.defence, playerCharacter.attack * 0.1);
+
+    await 
+    this.gamePlay.showDamage(enemyIndex, Math.round(damage));
+
+    enemyCharacter.health -= damage;
+    if (enemyCharacter.health < 0) {
+      enemyCharacter.health = 0;
+    }
+
+    this.gamePlay.redrawPositions(this.positions);
+    this.clearSelection();
+    this.gameState.selectedCell = null;
+    this.gameState.availableMoves = [];
+    this.gameState.availableAttacks = [];
+    this.gameState.toggleTurn();
+  }
+
   isPlayerCharacter(character) {
     return this.playerTypes.includes(character.type);
   }
@@ -169,6 +194,7 @@ export default class GameController {
         GamePlay.showError('Противник вне зоны досягаемости!');
         return;
       }
+      this.performAttack(this.gameState.selectedCell, index);
       return;
     }
 
