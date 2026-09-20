@@ -146,6 +146,18 @@ export default class GameController {
         GamePlay.showError('Тут не пройти!');
         return;
       }
+
+      const selectedPosition = this.positions.find(p => p.position === this.gameState.selectedCell);
+      selectedPosition.position = index;
+      
+      this.clearSelection();
+      this.gameState.selectedCell = null;
+      this.gameState.availableMoves = [];
+      this.gameState.availableAttacks = [];
+
+      this.gamePlay.redrawPositions(this.positions);
+      this.gameState.toggleTurn();
+
       return;
     }
 
